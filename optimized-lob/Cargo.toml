@@ -14,3 +14,4 @@ keywords = ["rust", "order-book", "limit-order-book", "orderbook", "itch"]
 
 [dependencies]
 hex = "0.4"
+rand = "0.8"

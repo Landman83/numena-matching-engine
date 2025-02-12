@@ -4,16 +4,21 @@ use crate::{
     price::Price,
     quantity::Qty,
     utils::BookId,
+    market::MarketConfig,
+    market::MarketManager,
+    level::LevelId,
 };
 
 pub struct MatchingEngine {
     pub orderbook_manager: OrderBookManager,
+    pub market_manager: MarketManager,
 }
 
 impl MatchingEngine {
     pub fn new() -> Self {
         Self {
             orderbook_manager: OrderBookManager::new(),
+            market_manager: MarketManager::new(),
         }
     }
 
@@ -34,7 +39,7 @@ impl MatchingEngine {
         nonce: Option<u64>,
         expiry: Option<u64>,
         signature: Option<[u8; 65]>,
-    ) -> Qty {
+    ) -> (Qty, Vec<MatchDetails>) {
         let mut remaining_qty = qty;
 
         // Convert price to internal format
@@ -61,6 +66,8 @@ impl MatchingEngine {
             None => false,
         };
 
+        let mut match_details = Vec::new();
+
         if can_match {
             // Match against resting orders until either:
             // 1. The incoming order is fully filled
@@ -74,6 +81,25 @@ impl MatchingEngine {
                     // Execute the match
                     self.orderbook_manager.execute_order(resting_order_id, exec_qty);
                     remaining_qty -= exec_qty;
+
+                    // Add match details
+                    if let Some(maker_order) = self.orderbook_manager.oid_map.get(resting_order_id) {
+                        match_details.push(MatchDetails {
+                            maker_order: maker_order.clone(),
+                            taker_order: Order::new(
+                                qty,
+                                LevelId(0),
+                                book_id,
+                                trader,
+                                nonce,
+                                expiry,
+                                signature,
+                            ),
+                            exec_qty,
+                            exec_price: price.absolute() as u32,
+                            maker_is_buyer: !is_bid,
+                        });
+                    }
                 } else {
                     break;
                 }
@@ -95,13 +121,24 @@ impl MatchingEngine {
             );
         }
 
-        remaining_qty
+        (remaining_qty, match_details)
     }
+}
+
+#[derive(Debug)]
+pub struct MatchDetails {
+    pub maker_order: Order,
+    pub taker_order: Order,
+    pub exec_qty: Qty,
+    pub exec_price: u32,
+    pub maker_is_buyer: bool,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::{Duration, Instant};
+    use rand::Rng;
 
     // Helper function to print match details
     fn print_match_details(
@@ -165,7 +202,7 @@ mod tests {
         println!("Added resting sell order: ID(1), Qty(100), Price(100)");
 
         // Send in a matching buy order
-        let remaining = engine.match_order(
+        let (remaining, details) = engine.match_order(
             OrderId(2),
             BookId(0),
             Qty(60),
@@ -222,7 +259,7 @@ mod tests {
         println!("Added resting sell order: ID(1), Qty(100), Price(100)");
 
         // Send in a buy order at 99 (shouldn't match)
-        let remaining = engine.match_order(
+        let (remaining, _) = engine.match_order(
             OrderId(2),
             BookId(0),
             Qty(60),
@@ -256,11 +293,83 @@ mod tests {
         );
 
         // Match with buy order that should fully execute against first two orders
-        let remaining = engine.match_order(
+        let (remaining, _) = engine.match_order(
             OrderId(4), BookId(0), Qty(90), 102, true,
             Some([2; 20]), Some(2), Some(u64::MAX), Some([0; 65])
         );
 
         assert_eq!(remaining.value(), 0); // Should fully match 90 against 50+40
+    }
+
+    #[test]
+    fn test_matching_performance() {
+        let mut engine = MatchingEngine::new();
+        let num_orders = 100;
+        let mut rng = rand::thread_rng();
+        let mut latencies = Vec::with_capacity(num_orders);
+
+        // Setup initial orderbook with some resting orders
+        for i in 0..1000 {
+            engine.orderbook_manager.add_order(
+                OrderId(i as u32),
+                BookId(0),
+                Qty(rng.gen_range(1..=100)),
+                rng.gen_range(90..110),
+                rng.gen_bool(0.5),  // Random buy/sell
+                Some([1; 20]),
+                Some(i as u64),
+                Some(u64::MAX),
+                Some([0; 65]),
+            );
+        }
+
+        println!("\nMATCHING ENGINE PERFORMANCE TEST");
+        println!("===============================");
+        println!("Processing {} orders...\n", num_orders);
+
+        let start_time = Instant::now();
+        let mut total_matches = 0;
+
+        // Process random orders and measure latency
+        for i in 1000..(1000 + num_orders) {
+            let order_start = Instant::now();
+            let (remaining, _) = engine.match_order(
+                OrderId(i as u32),
+                BookId(0),
+                Qty(rng.gen_range(1..=100)),
+                rng.gen_range(90..110),
+                rng.gen_bool(0.5),
+                Some([1; 20]),
+                Some(i as u64),
+                Some(u64::MAX),
+                Some([0; 65]),
+            );
+            latencies.push(order_start.elapsed());
+
+            if remaining.value() == 0 {
+                total_matches += 1;
+            }
+        }
+
+        let total_time = start_time.elapsed();
+        let avg_latency = latencies.iter().sum::<Duration>() / latencies.len() as u32;
+        let max_latency = latencies.iter().max().unwrap();
+        let min_latency = latencies.iter().min().unwrap();
+        let throughput = num_orders as f64 / total_time.as_secs_f64();
+
+        println!("PERFORMANCE RESULTS");
+        println!("-----------------");
+        println!("Total Orders: {}", num_orders);
+        println!("Full Matches: {}", total_matches);
+        println!("Total Time: {:?}", total_time);
+        println!("Throughput: {:.2} orders/sec", throughput);
+        println!("\nLATENCY STATISTICS");
+        println!("Average: {:?}", avg_latency);
+        println!("Maximum: {:?}", max_latency);
+        println!("Minimum: {:?}", min_latency);
+
+        // Basic assertions
+        assert!(throughput > 0.0);
+        assert!(total_matches > 0);
     }
 }
