@@ -105,4 +105,28 @@ impl OrderBook {
             self.level_pool.free(LevelId(order.level_id().value()));
         }
     }
+
+    /// Gets the best bid price
+    #[inline]
+    pub fn get_best_bid(&self) -> Option<Price> {
+        self.bids.get_best_price()
+    }
+
+    /// Gets the best ask price
+    #[inline]
+    pub fn get_best_ask(&self) -> Option<Price> {
+        self.asks.get_best_price()
+    }
+
+    /// Gets the level ID of the best bid
+    #[inline]
+    pub fn get_best_bid_level(&self) -> Option<LevelId> {
+        self.bids.get_best_level()
+    }
+
+    /// Gets the level ID of the best ask
+    #[inline]
+    pub fn get_best_ask_level(&self) -> Option<LevelId> {
+        self.asks.get_best_level()
+    }
 }

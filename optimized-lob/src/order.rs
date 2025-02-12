@@ -172,4 +172,12 @@ impl OidMap {
         let idx = oid.0 as usize;
         self.data.get_mut(idx)?.as_mut()
     }
+
+    #[inline]
+    pub fn iter(&self) -> impl Iterator<Item = (OrderId, &Order)> {
+        self.data
+            .iter()
+            .enumerate()
+            .filter_map(|(i, order)| order.as_ref().map(|o| (OrderId(i as u32), o)))
+    }
 }

@@ -213,4 +213,49 @@ impl OrderBookManager {
         }
         self.add_order(new_order_id, book_id, new_qty, new_price, is_bid);
     }
+
+    /// Gets the best bid price for a given book
+    #[inline]
+    pub fn get_best_bid(&self, book_id: BookId) -> Option<Price> {
+        self.books
+            .get(book_id.value() as usize)?
+            .as_ref()?
+            .get_best_bid()
+    }
+
+    /// Gets the best ask price for a given book
+    #[inline]
+    pub fn get_best_ask(&self, book_id: BookId) -> Option<Price> {
+        self.books
+            .get(book_id.value() as usize)?
+            .as_ref()?
+            .get_best_ask()
+    }
+
+    /// Gets the next matching order at or better than the given price
+    /// Returns (OrderId, Qty) if a match is found
+    #[inline]
+    pub fn get_next_match(
+        &self,
+        book_id: BookId,
+        is_bid: bool,
+        price: Price,
+    ) -> Option<(OrderId, Qty)> {
+        let book = self.books.get(book_id.value() as usize)?.as_ref()?;
+        
+        // Get the best matching level from the opposite side
+        let level_id = if is_bid {
+            book.get_best_ask_level()
+        } else {
+            book.get_best_bid_level()
+        }?;
+
+        // Find the first order at this level
+        for (oid, order) in self.oid_map.iter() {
+            if order.book_id() == book_id && order.level_id() == level_id {
+                return Some((oid, order.qty()));
+            }
+        }
+        None
+    }
 }

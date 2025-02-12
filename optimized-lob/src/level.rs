@@ -163,4 +163,16 @@ impl SortedLevels {
             }
         }
     }
+
+    /// Gets the best price in the level
+    #[inline]
+    pub fn get_best_price(&self) -> Option<Price> {
+        self.0.first().map(|level| level.price())
+    }
+
+    /// Gets the level ID of the best price
+    #[inline]
+    pub fn get_best_level(&self) -> Option<LevelId> {
+        self.0.first().map(|level| level.level_id())
+    }
 }
