@@ -38,6 +38,10 @@ impl OrderBookManager {
     /// - `qty`: The quantity of the order. Represented as shares in the orderbook.
     /// - `price32`: The price of the order as a 32-bit unsigned integer. Return the Price(4) in the orderbook.
     /// - `is_bid`: A flag indicating whether the order is a bid (true) or ask (false). Return the Buy/Sell Indicator as boolean.
+    /// - `trader`: Ethereum address as fixed bytes
+    /// - `nonce`: Order nonce for signature
+    /// - `expiry`: Timestamp
+    /// - `signature`: Raw signature bytes (r,s,v)
     ///
     /// ## Example:
     /// ```
@@ -49,6 +53,10 @@ impl OrderBookManager {
     ///     Qty(100), // Quantity
     ///     600, // Price
     ///     true, // Is Bid
+    ///     Some([0; 20]), // Trader
+    ///     Some(123456), // Nonce
+    ///     Some(1682534400), // Expiry
+    ///     Some([0; 65]), // Signature
     /// );
     /// ```
     #[inline]
@@ -59,6 +67,10 @@ impl OrderBookManager {
         qty: Qty,
         price32: u32,
         is_bid: bool,
+        trader: Option<[u8; 20]>,
+        nonce: Option<u64>,
+        expiry: Option<u64>,
+        signature: Option<[u8; 65]>,
     ) {
         let price_i32 = if is_bid {
             price32 as i32
@@ -71,7 +83,7 @@ impl OrderBookManager {
 
         self.oid_map.reserve(order_id);
 
-        let mut order = Order::new(qty, LevelId(0), book_id);
+        let mut order = Order::new(qty, LevelId(0), book_id, trader, nonce, expiry, signature);
 
         // Check if the book for the given book_id exists; if not, create it.
         if self.books[book_id.value() as usize].is_none() {
@@ -211,7 +223,7 @@ impl OrderBookManager {
             }
             self.oid_map.remove(order_id);
         }
-        self.add_order(new_order_id, book_id, new_qty, new_price, is_bid);
+        self.add_order(new_order_id, book_id, new_qty, new_price, is_bid, None, None, None, None);
     }
 
     /// Gets the best bid price for a given book
@@ -244,15 +256,27 @@ impl OrderBookManager {
         let book = self.books.get(book_id.value() as usize)?.as_ref()?;
         
         // Get the best matching level from the opposite side
-        let level_id = if is_bid {
+        let level = if is_bid {
             book.get_best_ask_level()
         } else {
             book.get_best_bid_level()
         }?;
 
+        // Check if price is still acceptable
+        let level_price = book.level_pool.get(level)?.price();
+        let can_match = if is_bid {
+            price.absolute() >= level_price.absolute()
+        } else {
+            price.absolute() <= level_price.absolute()
+        };
+
+        if !can_match {
+            return None;
+        }
+
         // Find the first order at this level
         for (oid, order) in self.oid_map.iter() {
-            if order.book_id() == book_id && order.level_id() == level_id {
+            if order.book_id() == book_id && order.level_id() == level {
                 return Some((oid, order.qty()));
             }
         }

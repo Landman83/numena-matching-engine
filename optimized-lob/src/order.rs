@@ -17,6 +17,10 @@ pub struct Order {
     level_id: LevelId,
     book_id: BookId,
     qty: Qty,
+    trader: Option<[u8; 20]>,      // Ethereum address as fixed bytes
+    nonce: Option<u64>,            // Order nonce for signature
+    expiry: Option<u64>,           // Timestamp
+    signature: Option<[u8; 65]>,   // Raw signature bytes (r,s,v)
 }
 
 impl Debug for Order {
@@ -26,6 +30,10 @@ impl Debug for Order {
             .field("level_id", &self.level_id)
             .field("book_id", &self.book_id)
             .field("qty", &self.qty)
+            .field("trader", &self.trader)
+            .field("nonce", &self.nonce)
+            .field("expiry", &self.expiry)
+            .field("signature", &self.signature)
             .finish()
     }
 }
@@ -45,11 +53,23 @@ impl AsRef<Order> for Order {
 impl Order {
     /// Creates a new order with the given quantity, level ID, and book ID.
     #[inline]
-    pub fn new(qty: Qty, level_id: LevelId, book_id: BookId) -> Self {
+    pub fn new(
+        qty: Qty, 
+        level_id: LevelId, 
+        book_id: BookId,
+        trader: Option<[u8; 20]>,
+        nonce: Option<u64>,
+        expiry: Option<u64>,
+        signature: Option<[u8; 65]>,
+    ) -> Self {
         Self {
+            qty,
             level_id,
             book_id,
-            qty,
+            trader,
+            nonce,
+            expiry,
+            signature,
         }
     }
 
@@ -95,6 +115,26 @@ impl Order {
     #[inline]
     pub fn set_level_id(&mut self, level_id: LevelId) {
         self.level_id = level_id;
+    }
+
+    /// Gets the trader associated with the order.
+    pub fn trader(&self) -> Option<[u8; 20]> {
+        self.trader
+    }
+
+    /// Gets the nonce associated with the order.
+    pub fn nonce(&self) -> Option<u64> {
+        self.nonce
+    }
+
+    /// Gets the expiry associated with the order.
+    pub fn expiry(&self) -> Option<u64> {
+        self.expiry
+    }
+
+    /// Gets the signature associated with the order.
+    pub fn signature(&self) -> Option<[u8; 65]> {
+        self.signature
     }
 }
 
