@@ -4,6 +4,7 @@ use crate::{
     level::LevelId,
     quantity::Qty,
     utils::{BookId, INITIAL_ORDER_COUNT},
+    price::Price,
 };
 use std::fmt::Debug;
 
@@ -15,6 +16,7 @@ pub struct OrderId(pub u32);
 #[derive(Default, Clone)]
 pub struct Order {
     level_id: LevelId,
+    price: Price,
     book_id: BookId,
     qty: Qty,
     trader: Option<[u8; 20]>,      // Ethereum address as fixed bytes
@@ -28,6 +30,7 @@ impl Debug for Order {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Order")
             .field("level_id", &self.level_id)
+            .field("price", &self.price)
             .field("book_id", &self.book_id)
             .field("qty", &self.qty)
             .field("trader", &self.trader)
@@ -66,6 +69,7 @@ impl Order {
             qty,
             level_id,
             book_id,
+            price: Price(0),
             trader,
             nonce,
             expiry,
@@ -135,6 +139,35 @@ impl Order {
     /// Gets the signature associated with the order.
     pub fn signature(&self) -> Option<[u8; 65]> {
         self.signature
+    }
+
+    /// Creates a new order with price - this will be used for order submission
+    #[inline]
+    pub fn new_submission(
+        qty: Qty,
+        price: Price,
+        book_id: BookId,
+        trader: [u8; 20],
+        nonce: u64,
+        expiry: u64,
+        signature: [u8; 65],
+    ) -> Self {
+        Self {
+            qty,
+            level_id: LevelId(0), // This will be assigned by the matching engine
+            price,
+            book_id,
+            trader: Some(trader),
+            nonce: Some(nonce),
+            expiry: Some(expiry),
+            signature: Some(signature),
+        }
+    }
+
+    /// Gets the price of the order
+    #[inline]
+    pub fn price(&self) -> Price {
+        self.price
     }
 }
 
