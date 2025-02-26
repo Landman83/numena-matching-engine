@@ -175,4 +175,8 @@ impl SortedLevels {
     pub fn get_best_level(&self) -> Option<LevelId> {
         self.0.first().map(|level| level.level_id())
     }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, PriceLevel> {
+        self.0.iter()
+    }
 }

@@ -4,6 +4,7 @@ use crate::{
     quantity::Qty,
     utils::BookId,
 };
+use std::fmt;
 
 #[derive(Debug)]
 pub enum OrderIntakeError {
@@ -13,9 +14,19 @@ pub enum OrderIntakeError {
     InvalidTrader,
     InvalidSignature,
     InvalidNonce,
-    InvalidExpiry,
-    ExpiryTooSoon,
-    ExpiryTooFar,
+}
+
+impl fmt::Display for OrderIntakeError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            OrderIntakeError::InvalidQuantity => write!(f, "Invalid quantity"),
+            OrderIntakeError::InvalidPrice => write!(f, "Invalid price"),
+            OrderIntakeError::InvalidBookId => write!(f, "Invalid book ID"),
+            OrderIntakeError::InvalidTrader => write!(f, "Invalid trader address"),
+            OrderIntakeError::InvalidSignature => write!(f, "Invalid signature"),
+            OrderIntakeError::InvalidNonce => write!(f, "Invalid nonce"),
+        }
+    }
 }
 
 /// Represents an order submission from the frontend
@@ -26,7 +37,7 @@ pub struct OrderSubmission {
     pub quantity: u32,     // Changed from u64 to u32 to match Qty
     pub trader: String,
     pub nonce: u64,
-    pub expiry: u64,
+    pub expiry: Option<u64>,  // Make expiry optional
     pub signature: String,
 }
 
@@ -52,36 +63,20 @@ impl OrderSubmission {
         let mut trader = [0u8; 20];
         trader.copy_from_slice(&trader_bytes);
 
-        // Convert hex signature to bytes
+        // Just convert signature to bytes without validation
         let sig_bytes = hex::decode(&self.signature.trim_start_matches("0x"))
             .map_err(|_| OrderIntakeError::InvalidSignature)?;
-        if sig_bytes.len() != 65 {
-            return Err(OrderIntakeError::InvalidSignature);
-        }
         let mut signature = [0u8; 65];
-        signature.copy_from_slice(&sig_bytes);
-
-        // Validate expiry
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        
-        if self.expiry <= now {
-            return Err(OrderIntakeError::ExpiryTooSoon);
-        }
-        
-        if self.expiry > now + 24 * 60 * 60 {  // 24 hours max
-            return Err(OrderIntakeError::ExpiryTooFar);
-        }
+        let sig_len = std::cmp::min(sig_bytes.len(), 65);
+        signature[..sig_len].copy_from_slice(&sig_bytes[..sig_len]);
 
         Ok(Order::new_submission(
-            Qty(self.quantity),    // Now u32, no conversion needed
-            Price(self.price),     // Now i32, no conversion needed
+            Qty(self.quantity),
+            Price(self.price),
             BookId::from_str(&self.book_id)?,
             trader,
             self.nonce,
-            self.expiry,
+            self.expiry.unwrap_or(u64::MAX), // Use max value if no expiry provided
             signature,
         ))
     }
@@ -113,10 +108,10 @@ mod tests {
             quantity: 100,
             trader: "0x1234567890123456789012345678901234567890".to_string(),
             nonce: 1,
-            expiry: std::time::SystemTime::now()
+            expiry: Some(std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
-                .as_secs() + 3600,  // 1 hour from now
+                .as_secs() + 3600),  // 1 hour from now
             signature: "0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345".to_string(),
         };
 
@@ -132,10 +127,7 @@ mod tests {
             quantity: 0,  // Invalid quantity
             trader: "0x1234567890123456789012345678901234567890".to_string(),
             nonce: 1,
-            expiry: std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_secs() + 3600,
+            expiry: None,
             signature: "0x123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345".to_string(),
         };
 

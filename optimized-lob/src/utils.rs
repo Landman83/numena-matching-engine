@@ -6,8 +6,6 @@ pub const INITIAL_ORDER_COUNT: usize = 1 << 20;
 pub const MAX_BOOKS: usize = 1 << 14;
 pub const MAX_LEVELS: usize = 1 << 20;
 
-use std::str::FromStr;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct BookId(pub u32);
 

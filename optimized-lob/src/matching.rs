@@ -4,7 +4,6 @@ use crate::{
     price::Price,
     quantity::Qty,
     utils::BookId,
-    market::MarketConfig,
     market::MarketManager,
     level::LevelId,
 };

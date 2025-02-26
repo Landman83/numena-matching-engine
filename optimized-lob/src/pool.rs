@@ -2,7 +2,6 @@
 
 // Import the Level and LevelId structs from the level module.
 use crate::level::{Level, LevelId};
-use crate::utils::MAX_LEVELS;
 
 // Define a struct named LevelPool, which is a pool for managing Level objects.
 #[derive(Clone)]
